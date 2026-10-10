@@ -1,7 +1,0 @@
-{
-  "specialist": "plonk",
-  "image_id": "mock_ambiguous_fr",
-  "clues": [],
-  "region_scores": {"FR-CVL": 0.31, "FR-BFC": 0.18, "FR-IDF": 0.14, "FR-PDL": 0.12, "FR-GES": 0.09},
-  "localizability": 0.42
-}

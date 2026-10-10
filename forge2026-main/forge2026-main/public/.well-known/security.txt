@@ -1,5 +1,0 @@
-# https://www.rfc-editor.org/rfc/rfc9116
-Contact: mailto:main@forgehackathon.com
-Expires: 2027-08-31T00:00:00.000Z
-Preferred-Languages: en, pt
-Canonical: https://forgehackathon.com/.well-known/security.txt

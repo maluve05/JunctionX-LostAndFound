@@ -1,0 +1,8 @@
+{
+  "specialist": "text",
+  "image_id": "mock_galicia",
+  "clues": [{
+    "category": "language", "observation": "municipal sign in Galician", "raw_text": "Concello de Ribadeo",
+    "view_id": "yaw045_tile1", "implies": ["ES-GA"], "excludes": ["PT", "FR"], "confidence": 0.85
+  }]
+}

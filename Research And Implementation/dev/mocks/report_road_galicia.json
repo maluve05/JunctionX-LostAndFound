@@ -1,0 +1,8 @@
+{
+  "specialist": "road",
+  "image_id": "mock_galicia",
+  "clues": [{
+    "category": "road_number", "observation": "white-on-red road sign", "raw_text": "N-634",
+    "view_id": "yaw135_tile2", "implies": ["ES-GA", "ES-AS", "ES-CB", "ES-PV"], "excludes": ["PT", "FR"], "confidence": 0.9
+  }]
+}

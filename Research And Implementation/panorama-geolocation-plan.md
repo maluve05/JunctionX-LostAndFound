@@ -105,7 +105,7 @@ Prints a markdown table of ranked candidates with Google Maps links, plus the hi
 | **A: Perception (Layer 1)** | `preprocess.py`, specialist agents, prompts | real images; outputs `SpecialistReport` |
 | **B: Reasoning (Layer 2)** | `regions.py` (allowlist + `normalise()`), `tools.py` (Nominatim/Overpass), `aggregator.py` (including the single-Opus baseline), `hint_advisor.py` | mock `SpecialistReport` |
 | **C: Eval + engine + interface** | **from Day 1:** collecting and labelling the eval set, `eval.py`, and Day-0 gate (b); then `plonk_engine.py` (self-contained: views in, region shares, likelihood scores and localizability out); then `run.py`; stretch goals: `app.py`, `models/` | real labelled images + mock `Result`; B calls `plonk_engine` through a stub until the real one lands |
-| **Shared (all three)** | `knowledge/*.md`: each person writes one country file, with sources, and a different person reviews it. `tests/`: each owner writes the tests for their own modules | — |
+| **Shared (all three)** | `knowledge/*.md`: each person writes one country file, with sources, and a different person reviews it. `dev/tests/`: each owner writes the tests for their own modules | — |
 
 They integrate on a shared branch once A's real outputs replace the mocks. C's eval score then decides what each person improves next.
 
@@ -152,7 +152,7 @@ class Result(BaseModel):        # what the UI / CLI / eval consumes
     hints_used: list[Hint] = []
 ```
 **Rules everyone sticks to:**
-- **Region codes come from one allowlist in `regions.py`** and are validated wherever they appear (`Clue.implies`/`excludes`, `Candidate.region`, `region_probs`, `Hint.value`, `eval/labels.csv`):
+- **Region codes come from one allowlist in `regions.py`** and are validated wherever they appear (`Clue.implies`/`excludes`, `Candidate.region`, `region_probs`, `Hint.value`, `dev/eval/labels.csv`):
   - **PT:** the 18 districts `PT-01`…`PT-18`, plus `PT-20` (Azores) and `PT-30` (Madeira).
   - **ES:** the 17 autonomous communities (`ES-AN`, `ES-GA`, …) plus `ES-CE` and `ES-ML`. **No province codes:** normalise `ES-LU` → `ES-GA`.
   - **FR:** the 13 metropolitan régions (`FR-BRE`, `FR-GES`, `FR-20R`, …). Map `FR-6AE` → `FR-GES`.
@@ -191,16 +191,17 @@ class Result(BaseModel):        # what the UI / CLI / eval consumes
  "verified_by": ["overpass: N-634 passes within 2 km"]}
 ```
 
-**Mock files (written on day 1, in `mocks/`):** 2–3 `SpecialistReport` files per specialist and 2–3 `Result` files, so person B can build against fake Layer-1 output and person C against fake Layer-2 output. Every mock must pass schema validation (a test checks this).
+**Mock files (written on day 1, in `dev/mocks/`):** 2–3 `SpecialistReport` files per specialist and 2–3 `Result` files, so person B can build against fake Layer-1 output and person C against fake Layer-2 output. Every mock must pass schema validation (a test checks this).
 
 ## Files
-- `schemas.py`: shared data formats (written first), plus `mocks/*.json`
+- `schemas.py`: shared data formats (written first), plus `dev/mocks/*.json`
 - `regions.py`: region allowlist, name → code `normalise()`, region centroids, and polygons for point-in-polygon lookup (e.g. from Natural Earth admin-1 or GADM)
 - `preprocess.py`, `agents.py`, `tools.py`, `aggregator.py`, `hint_advisor.py`, `plonk_engine.py`, `run.py`
-- `eval.py`, `eval/*.jpg`, `eval/labels.csv`
+- `eval.py` (in the repo root); eval images and `labels.csv` live in `dev/eval/`
 - `knowledge/{portugal,spain,france,shared}.md`: knowledge bases for the clues, with sources
 - `prompts/`: system prompts for each agent
-- `tests/`: unit tests (see Verification)
+- `dev/`: everything that isn't the live pipeline, so the repo root stays readable: `dev/tests/` (unit tests, see Verification), `dev/mocks/`, `dev/eval/` (images, `labels.csv`, README), `dev/scripts/` (`build_regions_geojson.py`, `fetch_wikimedia.py`), `dev/day0_plonk.py`
+- `data/regions.geojson`: region polygons read by `regions.region_of()` at run time; the one non-code file the live pipeline needs
 - Stretch goals: `app.py`, `models/`
 - `requirements.txt`: `anthropic`, `pydantic`, `py360convert`, `pillow`, `requests`, `diff-plonk` (brings in `torch`), `shapely`, `pytest`. Stretch goals add `streamlit`, `transformers` and `geoclip`.
 
@@ -212,8 +213,21 @@ class Result(BaseModel):        # what the UI / CLI / eval consumes
 - Read the Claude key from the `ANTHROPIC_API_KEY` env var. Never commit it.
 - **Cost and latency budget:** before the eval runs, measure the tokens and seconds for one round of each ablation arm and write them in a table here. Then decide how many arms × images you can afford, and cap image count / tile resolution if needed.
 
+**Day-0 gate (b), PLONK on C's laptop (CPU only, no CUDA; torch 2.14 CPU, Python 3.13; measured 2026-10-10 with `dev/day0_plonk.py`):**
+
+| step | library defaults | CPU defaults now in `PlonkBackend` |
+|---|---|---|
+| load model (once per process) | 24 s | 24 s |
+| embed 1 view | 2.8 s | 2.8 s |
+| sample 200 points, 1 view | 30 s | 6 s (`num_steps=32`, same sample quality) |
+| exact likelihood, per point | ~10 s | ~1.9 s (`atol=rtol=1e-3`, same ranking) |
+| localizability (16 MC samples) | 137 s | replaced by the sample-concentration proxy |
+| **`run.py --arm plonk`, one panorama, 8 views** | — | **~90 s** |
+
+Consequences: on CPU the 2,000-point likelihood rounds in §4b are not feasible (about an hour each). `PlonkEngine(scorer="auto")` therefore uses a **KDE over PLONK's own samples** for candidate and grid scoring when there's no GPU, and exact likelihood on GPU. Sanity check on a Santiago de Compostela 360° panorama: 58% of samples in ES-GA (correct), pin 25 km from the truth, advice "submit". To use exact scoring, a GPU machine (or a Colab T4) is needed. Install note: `diff-plonk` pins `scipy==1.13.1`, which has no wheel for Python 3.13, so install it with `--no-deps` (see `requirements.txt`).
+
 ## Verification
-1. **Eval set (C, from Day 1):** collect **60 or more** panoramas with known locations across PT/ES/FR. Weight them toward images that look like the challenge's: your own past challenge rounds first, then Mapillary/Wikimedia 360° images with coordinates. Spread them across regions. Store them as `eval/*.jpg` plus `labels.csv` (with an allowlist region code). With 20–30 images, region accuracy is only known to within about ±18 points, which is too wide to compare setups.
+1. **Eval set (C, from Day 1):** collect **60 or more** panoramas with known locations across PT/ES/FR. Weight them toward images that look like the challenge's: your own past challenge rounds first, then Mapillary/Wikimedia 360° images with coordinates. Spread them across regions. Store them as `dev/eval/*.jpg` plus `dev/eval/labels.csv` (with an allowlist region code). With 20–30 images, region accuracy is only known to within about ±18 points, which is too wide to compare setups.
 2. `python eval.py` runs the pipeline with no hints.
    - **Main metrics (both reported, with 95% confidence intervals), until the Day-0 gate settles which one the challenge uses:**
      - **region accuracy**: does `argmax(region_probs)` match the true region?
@@ -224,7 +238,7 @@ class Result(BaseModel):        # what the UI / CLI / eval consumes
 4. Tune the knowledge bases and the hint-advisor threshold τ based on which clues fail.
 5. Test it by hand on a live challenge panorama.
 6. **Unit tests (`pytest`, deterministic, no live API calls):**
-   - every `mocks/*.json` file validates against `schemas.py`
+   - every `dev/mocks/*.json` file validates against `schemas.py`
    - the region validator rejects province codes and free-text names; `normalise()` maps "Andalucía" → `ES-AN` and `ES-LU` → `ES-GA`
    - `preprocess` cuts an equirectangular image into the expected number of views at the right yaw/pitch, and folder input passes through unchanged
    - `tools.py` runs against recorded Nominatim/Overpass responses

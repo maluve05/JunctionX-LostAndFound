@@ -1,0 +1,17 @@
+{
+  "image_id": "mock_galicia",
+  "candidates": [
+    {"rank": 1, "lat": 43.53, "lon": -7.04, "radius_km": 5, "name": "Near Ribadeo, Lugo", "region": "ES-GA", "probability": 0.55,
+     "evidence": ["N-634 sign", "Galician text 'Concello'", "eucalyptus", "source: verified_clue"],
+     "verified_by": ["overpass: N-634 passes within 2 km"]},
+    {"rank": 2, "lat": 43.48, "lon": -6.90, "radius_km": 10, "name": "Near Tapia de Casariego, Asturias", "region": "ES-AS", "probability": 0.2,
+     "evidence": ["N-634 continues into Asturias", "source: plonk"]},
+    {"rank": 3, "lat": 41.85, "lon": -8.35, "radius_km": 40, "name": "Viana do Castelo district", "region": "PT-16", "probability": 0.05,
+     "evidence": ["eucalyptus and granite", "source: region_centroid"]}
+  ],
+  "region_probs": {"ES-GA": 0.62, "ES-AS": 0.22, "ES-CB": 0.04, "PT-16": 0.05},
+  "low_confidence": false,
+  "hint_advice": "submit",
+  "suggested_hint": null,
+  "hints_used": []
+}

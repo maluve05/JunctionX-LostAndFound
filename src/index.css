@@ -3,6 +3,7 @@
 /* The build prompt is documentation, not source: keep its code fences out of
    Tailwind's class scan so they never inflate the shipped stylesheet. */
 @source not "../lost-and-found-forge-prompt.md";
+@source not "../*-prompt.md";
 
 /* ---------------------------------------------------------------------------
    Lost & Found — design tokens
@@ -32,6 +33,17 @@
   --color-pt: #10b981;
   --color-fr: #3b82f6;
   --color-es: #f59e0b;
+
+  /* Clue signal — one colour per clue, bound to the active clue across the whole
+     inspection screen: the crop box, the magnified viewport and its brackets, the
+     precision meter, the clue badge, the insight cards, the leading probability
+     row and the primary action. Never more than one clue colour at a time, and
+     the clue's tier name and radius stay real text, so colour is never the only
+     carrier of meaning. Clue 1 keeps electric lime, the repository's signal
+     colour; clue 3 is the one vibrant orange. */
+  --color-tier-city: #38bdf8;
+  --color-tier-street: #f97316;
+  --color-tier-street-strong: #fb923c;
 
   --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -159,5 +171,241 @@
   .status-pulse {
     animation: none;
     opacity: 0.8;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Screen 3 — the results map
+
+   Leaflet ships its own stylesheet unlayered, and unlayered rules beat every
+   cascade layer regardless of order. These overrides therefore sit outside
+   `@layer components` on purpose: source order alone decides, and index.css is
+   bundled after leaflet.css. Do not move them into a layer.
+--------------------------------------------------------------------------- */
+
+/* A result pin: an 18px dot in the rank's colour, floating like the Forge's
+   doodles. ResultsView sets `--pin` per marker and staggers nothing else. */
+.map-pin {
+  display: block;
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  background: var(--pin, var(--color-lime));
+  border: 2px solid rgb(0 0 0 / 0.55);
+  box-shadow:
+    0 0 10px var(--pin, var(--color-lime)),
+    0 0 26px color-mix(in srgb, var(--pin, var(--color-lime)) 45%, transparent);
+}
+
+/* Leaflet's own chrome, dressed in our surfaces. */
+.leaflet-container {
+  background: var(--color-surface-2);
+  font-family: var(--font-sans);
+}
+
+.leaflet-bar {
+  border: 1px solid rgb(255 255 255 / 0.1) !important;
+  border-radius: 4px !important;
+  box-shadow: 0 14px 30px -18px rgb(0 0 0 / 0.9) !important;
+}
+
+.leaflet-control-zoom a {
+  background: var(--color-surface) !important;
+  color: rgb(255 255 255 / 0.72) !important;
+  border-color: rgb(255 255 255 / 0.08) !important;
+  border-radius: 2px !important;
+}
+
+.leaflet-control-zoom a:hover,
+.leaflet-control-zoom a:focus-visible {
+  background: var(--color-surface-2) !important;
+  color: #ffffff !important;
+}
+
+/* The popup is ours end to end: Leaflet's wrapper is stripped bare and the
+   card inside carries the design. */
+.dark-popup .leaflet-popup-content-wrapper,
+.dark-popup .leaflet-popup-tip {
+  background: transparent;
+  box-shadow: none;
+}
+
+.dark-popup .leaflet-popup-content {
+  margin: 0;
+}
+
+.map-popup {
+  min-width: 168px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--color-surface-2);
+  border: 1px solid rgb(255 255 255 / 0.08);
+  box-shadow: 0 18px 40px -20px rgb(0 0 0 / 0.9);
+}
+
+.map-popup-city {
+  margin: 0 0 4px;
+  color: var(--accent, var(--color-lime));
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.map-popup-coords {
+  margin: 0;
+  color: rgb(255 255 255 / 0.6);
+  font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, monospace);
+  font-size: 12px;
+}
+
+.map-popup-label {
+  margin: 4px 0 0;
+  color: var(--color-mist);
+  font-size: 13px;
+}
+
+/* --- The field behind the map ---------------------------------------------
+   The results map hangs in a dark room rather than floating on flat black: a
+   soft halo with a slow breath, and a dot matrix drifting under it. Both sit
+   behind the panel (`z-0`), neither is interactive, and both are pure paint.
+   The halo's three sources are the three rank colours at low alpha, so the
+   map looks lit from its own answer. */
+.map-halo {
+  background-image:
+    radial-gradient(56% 48% at 50% 116%, rgb(214 255 66 / 0.3), transparent 74%),
+    radial-gradient(58% 54% at 0% -6%, rgb(56 189 248 / 0.2), transparent 76%),
+    radial-gradient(60% 56% at 104% 86%, rgb(249 115 22 / 0.15), transparent 78%);
+  filter: blur(40px);
+}
+
+/* The basemap is Esri's mid-grey canvas; this pulls it down onto our own
+   obsidian floor and mutes its colour, so the pins and the dashed search area
+   are the only bright things on the map. Labels stay legible at these values. */
+.leaflet-tile-pane {
+  filter: brightness(0.45) saturate(0.55) contrast(1.16);
+}
+
+.map-grid {
+  background-image: radial-gradient(rgb(233 234 238 / 0.16) 1px, transparent 1px);
+  background-size: 24px 24px;
+  mask-image: radial-gradient(88% 78% at 50% 52%, #000 22%, transparent 84%);
+  -webkit-mask-image: radial-gradient(88% 78% at 50% 52%, #000 22%, transparent 84%);
+}
+
+/* The Forge's scan, as a light bar that crosses the map once, with a soft
+   trail under it. Painted with background-position so nothing reflows. */
+.map-scan {
+  background-image:
+    linear-gradient(90deg, transparent, rgb(214 255 66 / 0.85), transparent),
+    linear-gradient(180deg, rgb(214 255 66 / 0.18), transparent);
+  background-repeat: no-repeat;
+  background-size: 100% 1.5px, 100% 52px;
+  background-position: 0 -6%, 0 -6%;
+  opacity: 0;
+}
+
+/* --- Motion, borrowed from the Forge build -------------------------------- */
+
+/* Everything here is gated on `no-preference`: under reduced motion the
+   elements simply render in their final state, offsets included. */
+@media (prefers-reduced-motion: no-preference) {
+  /* forge2026 …/styles.css → `line-rise`: an offset line slides home. */
+  .line-rise {
+    transform: translateY(108%);
+    animation: line-rise 1.3s var(--ease-out-soft) 0.15s forwards;
+  }
+
+  .line-rise-2 {
+    animation-delay: 0.25s;
+  }
+
+  /* `doodle-float`: the pins breathe, six seconds to a breath. */
+  .map-pin {
+    animation: pin-float 6s ease-in-out infinite;
+  }
+
+  /* `status-pulse` on the search area, and `doodle-draw`'s crawl on its dashes. */
+  .map-aura {
+    animation:
+      aura-pulse 2.4s ease-in-out infinite,
+      aura-crawl 30s linear infinite;
+  }
+
+  /* The backdrop breathes; the dot matrix drifts a cell at a time. */
+  .map-halo {
+    animation: halo-breathe 7.5s ease-in-out infinite;
+  }
+
+  .map-grid {
+    animation: grid-drift 26s linear infinite;
+  }
+
+  /* The sweep waits for the panorama to dissolve (1.55s), then crosses once. */
+  .map-scan {
+    animation: map-scan 1.6s var(--ease-out-soft) 1.45s 1 both;
+  }
+}
+
+@keyframes pin-float {
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes aura-pulse {
+  0%,
+  100% {
+    stroke-opacity: 0.35;
+  }
+  50% {
+    stroke-opacity: 0.9;
+  }
+}
+
+@keyframes aura-crawl {
+  to {
+    stroke-dashoffset: -100;
+  }
+}
+
+@keyframes line-rise {
+  to {
+    transform: none;
+  }
+}
+
+@keyframes halo-breathe {
+  0%,
+  100% {
+    opacity: 0.82;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(1.025);
+  }
+}
+
+@keyframes grid-drift {
+  to {
+    background-position: 24px 24px;
+  }
+}
+
+@keyframes map-scan {
+  0% {
+    opacity: 0;
+    background-position: 0 -6%, 0 -6%;
+  }
+  12% {
+    opacity: 1;
+  }
+  88% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    background-position: 0 106%, 0 106%;
   }
 }

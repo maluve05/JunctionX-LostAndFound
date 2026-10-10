@@ -6,8 +6,16 @@
  */
 export const EASE_OUT: [number, number, number, number] = [0.22, 1, 0.36, 1];
 
-/** The aperture shutter closing: accelerates into full cover. Opening uses `EASE_OUT`. */
+/** The aperture shutter closing: accelerates into full cover. Opening uses `EASE_FORGE`. */
 export const EASE_IN_OUT: [number, number, number, number] = [0.55, 0, 0.35, 1];
+
+/**
+ * The Forge curve — this repository's signature "fluid" ease, taken from the
+ * Forge reference build (`forge2026-main/forge2026-main/src/styles.css`, the
+ * `--ease-out` declaration). Used only for mechanical moves: the aperture
+ * blades opening and the camera morph. Content entrances keep `EASE_OUT`.
+ */
+export const EASE_FORGE: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
 /** Parent: staggers its `fade-up` children, top to bottom. */
 export const stagger = {

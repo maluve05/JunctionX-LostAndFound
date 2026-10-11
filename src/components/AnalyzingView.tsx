@@ -56,7 +56,7 @@ export function AnalyzingView({ panorama, onBack, onDone }: AnalyzingViewProps) 
 
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.detail || `Upload failed with status ${res.status}`);
+          throw new Error(errData.detail || errData.error || `Upload failed with status ${res.status}`);
         }
 
         const data = await res.json();

@@ -9,6 +9,12 @@
     "binding": "ASSETS",
     "not_found_handling": "single-page-application"
   },
+  "routes": [
+    {
+      "pattern": "junction.chitswa.com",
+      "custom_domain": true
+    }
+  ],
   "vars": {
     "BACKEND_URL": "http://127.0.0.1:8000"
   }

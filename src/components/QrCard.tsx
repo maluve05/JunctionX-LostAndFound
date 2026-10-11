@@ -40,20 +40,9 @@ export function QrCard() {
           />
         </div>
 
-        <div className="flex flex-col items-center gap-1.5 text-center">
+        <div className="flex flex-col items-center gap-1 text-center">
           <p className="text-[13px] font-mono tracking-wider text-lime">{PRODUCTION_URL.replace("https://", "")}</p>
           <p className="text-[11px] text-mist/50">Scan to test on mobile</p>
-          <a
-            href="/code"
-            className="mt-1.5 inline-flex items-center gap-1.5 rounded-full border border-lime/30 bg-lime/10 px-3 py-1 font-mono text-[11px] font-medium text-lime transition-all hover:bg-lime/20 hover:text-white shadow-[0_0_12px_rgba(124,255,107,0.15)]"
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="7 10 12 15 17 10"/>
-              <line x1="12" y1="15" x2="12" y2="3"/>
-            </svg>
-            Download Source Code
-          </a>
         </div>
       </div>
     </motion.div>

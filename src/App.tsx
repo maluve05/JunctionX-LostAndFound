@@ -9,20 +9,24 @@ import {
 } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 
+import { AnalyzingView } from "@/components/AnalyzingView";
 import { Background } from "@/components/Background";
 import { InspectionView, LAST_CLUE_INDEX } from "@/components/InspectionView";
 import { LandingPage } from "@/components/LandingPage";
 import { ResultsView } from "@/components/ResultsView";
 import type { PanoramaInput } from "@/components/UploadZone";
 import { EASE_FORGE, EASE_IN_OUT, EASE_OUT, stagger } from "@/lib/motion";
+import type { GeolocationResult } from "@/lib/types";
 
-type Screen = "landing" | "inspecting" | "results";
+type Screen = "landing" | "analyzing" | "inspecting" | "results";
 /** idle → closing → (the swap happens here, fully covered) → opening → idle */
 type Shutter = "idle" | "closing" | "opening";
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>("landing");
   const [panorama, setPanorama] = useState<PanoramaInput | null>(null);
+  const [result, setResult] = useState<GeolocationResult | null>(null);
+  const [jobId, setJobId] = useState<string | null>(null);
   const [shutter, setShutter] = useState<Shutter>("idle");
 
   /** 0 = aperture open, 1 = fully closed. One value drives all four blades. */
@@ -30,7 +34,7 @@ export default function App() {
   const reticleOpacity = useTransform(progress, [0, 0.55, 1], [0, 0.9, 1]);
   /** Which clue the inspection screen opens on — 0 for a fresh analysis. */
   const [resumeClue, setResumeClue] = useState(0);
-  const intent = useRef<"inspect" | "results" | "reset">("inspect");
+  const intent = useRef<"analyze" | "inspect" | "results" | "reset">("analyze");
   const reduceMotion = useReducedMotion();
 
   useEffect(() => {
@@ -45,19 +49,22 @@ export default function App() {
     const closing = shutter === "closing";
     const controls = animate(progress, closing ? 1 : 0, {
       duration: closing ? 0.4 : 0.55,
-      // Hold the closed frame for a beat before opening onto the new screen.
       delay: closing ? 0 : 0.25,
       ease: closing ? EASE_IN_OUT : EASE_FORGE,
       onComplete: () => {
         if (closing) {
           // The blades fully cover the viewport: the swap happens unseen.
-          if (intent.current === "inspect") {
+          if (intent.current === "analyze") {
+            setScreen("analyzing");
+          } else if (intent.current === "inspect") {
             setScreen("inspecting");
           } else if (intent.current === "results") {
             setScreen("results");
           } else {
             setScreen("landing");
             setPanorama(null);
+            setResult(null);
+            setJobId(null);
           }
           setShutter("opening");
         } else {
@@ -72,7 +79,20 @@ export default function App() {
   const handleAnalyze = (input: PanoramaInput) => {
     if (shutter !== "idle") return;
     setPanorama(input);
-    // Every new panorama starts the analysis from the first clue.
+    setResult(null);
+    setResumeClue(0);
+
+    if (reduceMotion) {
+      setScreen("analyzing");
+      return;
+    }
+
+    intent.current = "analyze";
+    setShutter("closing");
+  };
+
+  const handleAnalysisDone = (analysisResult: GeolocationResult) => {
+    setResult(analysisResult);
     setResumeClue(0);
 
     if (reduceMotion) {
@@ -84,12 +104,13 @@ export default function App() {
     setShutter("closing");
   };
 
-  const handleBack = () => {
+  const handleBackToLanding = () => {
     if (shutter !== "idle") return;
 
     if (reduceMotion) {
       setScreen("landing");
       setPanorama(null);
+      setResult(null);
       return;
     }
 
@@ -97,14 +118,8 @@ export default function App() {
     setShutter("closing");
   };
 
-  /**
-   * Screen 3: the same aperture mechanic, one intent over. The swap happens
-   * while the blades are closed, so the results arrive fully composed.
-   */
   const handleViewResults = () => {
     if (shutter !== "idle") return;
-
-    // Only the last clue carries the button, so coming back must land there.
     setResumeClue(LAST_CLUE_INDEX);
 
     if (reduceMotion) {
@@ -116,7 +131,6 @@ export default function App() {
     setShutter("closing");
   };
 
-  /** Back to the clue the reveal came from — not all the way to the landing page. */
   const handleBackToClues = () => {
     if (shutter !== "idle") return;
 
@@ -129,13 +143,29 @@ export default function App() {
     setShutter("closing");
   };
 
+  const handleAnswerQuestion = async (optionIndex: number | null) => {
+    if (!jobId) return;
+    try {
+      await fetch(`/api/jobs/${jobId}/answer`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ option: optionIndex }),
+      });
+      // Clear question prompt once answered
+      if (result) {
+        setResult({ ...result, question: null });
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   return (
     <MotionConfig reducedMotion="user">
       <div className="relative min-h-screen bg-black">
         <Background />
 
-        {/* Aperture shutter: four transform-only blades meeting at the centre,
-            with the optical lock-on label arriving as the frame closes. */}
+        {/* Aperture shutter: four transform-only blades meeting at the centre */}
         {shutter !== "idle" && (
           <div className="pointer-events-none fixed inset-0 z-50 overflow-hidden">
             <motion.div
@@ -184,7 +214,13 @@ export default function App() {
               transition={{ duration: 0.5, ease: EASE_OUT }}
               className="relative flex min-h-screen flex-col overflow-x-hidden"
             >
-              <ResultsView panorama={panorama} onBack={handleBackToClues} />
+              <ResultsView
+                panorama={panorama}
+                result={result}
+                jobId={jobId}
+                onBack={handleBackToClues}
+                onAnswerQuestion={handleAnswerQuestion}
+              />
             </motion.div>
           ) : screen === "inspecting" && panorama ? (
             <motion.div
@@ -197,9 +233,25 @@ export default function App() {
             >
               <InspectionView
                 panorama={panorama}
-                onBack={handleBack}
+                result={result}
+                onBack={handleBackToLanding}
                 onViewResults={handleViewResults}
                 initialSlideIndex={resumeClue}
+              />
+            </motion.div>
+          ) : screen === "analyzing" && panorama ? (
+            <motion.div
+              key="analyzing"
+              initial={{ opacity: 0, scale: 1.015 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, transition: { duration: 0.18 } }}
+              transition={{ duration: 0.5, ease: EASE_OUT }}
+              className="relative flex min-h-screen flex-col overflow-x-hidden"
+            >
+              <AnalyzingView
+                panorama={panorama}
+                onBack={handleBackToLanding}
+                onDone={handleAnalysisDone}
               />
             </motion.div>
           ) : (

@@ -27,15 +27,17 @@ import {
   TrafficCone,
   Trees,
 } from "lucide-react";
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import type { PanoramaInput } from "@/components/UploadZone";
 import { EASE_FORGE, EASE_OUT } from "@/lib/motion";
+import type { GeolocationResult } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export interface InspectionViewProps {
   panorama: PanoramaInput;
+  result?: GeolocationResult | null;
   onBack: () => void;
   /** Fires when the presenter asks for the final results from the last clue. */
   onViewResults?: () => void;
@@ -299,6 +301,157 @@ const CLUE_SLIDES: ClueSlide[] = [
 /** The last clue's index — where returning from the results screen lands. */
 export const LAST_CLUE_INDEX = CLUE_SLIDES.length - 1;
 
+/** Computes crop box fractions on the 21:9 pane from a view_id */
+function computeBoxFromViewId(viewId: string): CropBox {
+  let deg = 0;
+  let tileIndex: number | null = null;
+
+  if (viewId.startsWith("yaw")) {
+    const rest = viewId.slice(3);
+    if (rest.includes("_tile")) {
+      const parts = rest.split("_tile");
+      deg = parseFloat(parts[0]) || 0;
+      tileIndex = parseInt(parts[1], 10);
+    } else {
+      deg = parseFloat(rest) || 0;
+    }
+  }
+
+  let x = (0.5 + deg / 360 - 0.125) % 1;
+  if (x < 0) x += 1;
+  let w = 0.25;
+
+  if (tileIndex !== null) {
+    w = 0.125;
+    if (tileIndex === 1 || tileIndex === 3) {
+      x = (x + 0.125) % 1;
+    }
+  } else if (viewId === "down" || viewId === "up") {
+    x = 0.375;
+    w = 0.25;
+  }
+
+  const h = w / 0.85;
+  let centerY = 0.5;
+  if (tileIndex === 0 || tileIndex === 1) centerY = 0.36;
+  else if (tileIndex === 2 || tileIndex === 3) centerY = 0.64;
+  else if (viewId === "down") centerY = 0.85;
+  else if (viewId === "up") centerY = 0.15;
+
+  let y = centerY - h / 2;
+  y = Math.max(0, Math.min(1 - h, y));
+
+  // Wrap-around
+  if (x + w > 1) {
+    x = Math.max(0, 1 - w);
+  }
+
+  return { x: Math.max(0, Math.min(1, x)), y, w, h };
+}
+
+export function buildClueSlides(result: GeolocationResult): ClueSlide[] {
+  const countryProbs: Probability[] = [
+    { country: "SPAIN", value: Math.round((result.countries["ES"] || 0) * 100) },
+    { country: "PORTUGAL", value: Math.round((result.countries["PT"] || 0) * 100) },
+    { country: "FRANCE", value: Math.round((result.countries["FR"] || 0) * 100) },
+  ];
+  const maxVal = Math.max(...countryProbs.map((p) => p.value));
+  countryProbs.forEach((p) => {
+    if (p.value === maxVal && maxVal > 0) p.top = true;
+  });
+  if (!countryProbs.some((p) => p.top)) countryProbs[0].top = true;
+
+  if (result.clues && result.clues.length > 0) {
+    return result.clues.slice(0, 5).map((clue, idx) => {
+      const tier: Tier = idx === 0 ? "COUNTRY" : idx === 1 ? "CITY" : "STREET";
+      const box = computeBoxFromViewId(clue.view_id || "yaw0");
+
+      const insights: Insight[] = [
+        {
+          icon: Eye,
+          label: "Observation",
+          fact: clue.observation ? clue.observation.slice(0, 75) : "Identified visual marker in panorama.",
+        },
+        {
+          icon: Signpost,
+          label: clue.raw_text ? "Detected text" : "Confidence",
+          fact: clue.raw_text
+            ? `Text read: "${clue.raw_text}"`
+            : `Confidence metric rated at ${Math.round((clue.confidence || 0.6) * 100)}%.`,
+        },
+        {
+          icon: Compass,
+          label: "Points to",
+          fact: clue.implies && clue.implies.length > 0
+            ? `Correlates with regions: ${clue.implies.join(", ")}.`
+            : "Strong correlation with Atlantic prior.",
+        },
+        {
+          icon: Crosshair,
+          label: "Hierarchy",
+          fact: `Assigned to ${tier.toLowerCase()} tier precision level.`,
+        },
+      ];
+
+      return {
+        id: idx + 1,
+        tier,
+        category: `${clue.source || "specialist"} · ${clue.category || "visual"}`,
+        title: clue.raw_text || clue.observation?.slice(0, 36) || `Evidence Clue #${idx + 1}`,
+        insights,
+        probabilities: countryProbs,
+        box,
+      };
+    });
+  }
+
+  if (result.candidates && result.candidates.length > 0) {
+    return result.candidates.slice(0, 3).map((cand, idx) => {
+      const tier: Tier = idx === 0 ? "STREET" : idx === 1 ? "CITY" : "COUNTRY";
+      const defaultBoxes = [
+        { x: 0.24, y: 0.56, w: 0.16, h: 0.18 },
+        { x: 0.62, y: 0.5, w: 0.18, h: 0.2 },
+        { x: 0.72, y: 0.43, w: 0.22, h: 0.26 },
+      ];
+
+      const insights: Insight[] = [
+        {
+          icon: MapPin,
+          label: "Candidate",
+          fact: cand.name || "Geographic hypothesis mode.",
+        },
+        {
+          icon: Crosshair,
+          label: "Likelihood",
+          fact: `Candidate mode carries ${Math.round(cand.probability * 100)}% posterior probability.`,
+        },
+        {
+          icon: Sparkles,
+          label: "Evidence",
+          fact: cand.evidence && cand.evidence.length > 0 ? cand.evidence[0] : "Synthesized from visual and spatial prior.",
+        },
+        {
+          icon: Compass,
+          label: "Verification",
+          fact: cand.verified_by && cand.verified_by.length > 0 ? cand.verified_by[0] : `Search radius ±${cand.radius_km} km.`,
+        },
+      ];
+
+      return {
+        id: idx + 1,
+        tier,
+        category: "Hypothesis · Geolocation Candidate",
+        title: cand.name,
+        insights,
+        probabilities: countryProbs,
+        box: defaultBoxes[idx % defaultBoxes.length],
+      };
+    });
+  }
+
+  return CLUE_SLIDES;
+}
+
 /** The clue colour lives on elements that never remount, so it eases rather than snaps. */
 const HUE_FADE = "transition-[color,background-color,border-color,box-shadow] duration-500";
 
@@ -314,12 +467,6 @@ function CornerMarks({ tone = "text-white/25" }: { tone?: string }) {
   );
 }
 
-/**
- * The convergence meter at the top of the panel: the active tier, its radius
- * and how far the search has narrowed. It sits outside the clue swap on
- * purpose — that way the fill *grows* 33 → 66 → 100 across clues instead of
- * restarting from zero on every change, and its colour travels with the camera.
- */
 function PrecisionMeter({ tier }: { tier: Tier }) {
   const { radiusKm, convergence, accent } = TIERS[tier];
   const activeIndex = TIER_ORDER.indexOf(tier);
@@ -380,36 +527,41 @@ function PrecisionMeter({ tier }: { tier: Tier }) {
 
 export function InspectionView({
   panorama,
+  result,
   onBack,
   onViewResults,
   initialSlideIndex = 0,
 }: InspectionViewProps) {
+  const slides = useMemo(() => (result ? buildClueSlides(result) : CLUE_SLIDES), [result]);
+  const lastIndex = Math.max(0, slides.length - 1);
+
   const [slideIndex, setSlideIndex] = useState(() =>
-    Math.min(Math.max(initialSlideIndex, 0), LAST_CLUE_INDEX),
+    Math.min(Math.max(initialSlideIndex, 0), lastIndex),
   );
-  const currentClue = CLUE_SLIDES[slideIndex];
+
+  // Sync if slides change
+  useEffect(() => {
+    setSlideIndex((idx) => Math.min(idx, lastIndex));
+  }, [lastIndex]);
+
+  const currentClue = slides[slideIndex] || slides[0];
   const { accent } = TIERS[currentClue.tier];
 
   const isFirst = slideIndex === 0;
-  const isLast = slideIndex === CLUE_SLIDES.length - 1;
+  const isLast = slideIndex === slides.length - 1;
 
   const reduceMotion = useReducedMotion();
 
   // ---------------------------------------------------------------- camera ---
-  // One live crop box, shared by the highlight, the zoom layer and the zoom
-  // pane's aspect. Nothing here remounts on a clue change: the same four values
-  // travel from one clue's box to the next, so the mapping stays exact on every
-  // frame of the move, not just at the endpoints.
-  const { box: firstBox } = CLUE_SLIDES[0];
+  const firstBox = slides[0]?.box || { x: 0.24, y: 0.56, w: 0.16, h: 0.18 };
   const camX = useMotionValue(firstBox.x);
   const camY = useMotionValue(firstBox.y);
   const camW = useMotionValue(firstBox.w);
   const camH = useMotionValue(firstBox.h);
 
   useEffect(() => {
-    const next = CLUE_SLIDES[slideIndex].box;
+    const next = currentClue.box;
 
-    // Reduced motion still *arrives*, it just does not travel.
     if (reduceMotion) {
       camX.set(next.x);
       camY.set(next.y);
@@ -427,7 +579,7 @@ export function InspectionView({
     ];
 
     return () => controls.forEach((control) => control.stop());
-  }, [slideIndex, reduceMotion, camX, camY, camW, camH]);
+  }, [slideIndex, reduceMotion, camX, camY, camW, camH, currentClue]);
 
   // The crop box on the panorama, as percentages of the pane.
   const cropLeft = useTransform(camX, (v) => `${v * 100}%`);
@@ -446,7 +598,7 @@ export function InspectionView({
 
   // ------------------------------------------------------------------ nav ---
   const goPrev = () => setSlideIndex((index) => Math.max(0, index - 1));
-  const goNext = () => setSlideIndex((index) => Math.min(CLUE_SLIDES.length - 1, index + 1));
+  const goNext = () => setSlideIndex((index) => Math.min(slides.length - 1, index + 1));
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -744,7 +896,7 @@ export function InspectionView({
                 {/* Bottom Navigation: forward until the last clue, which reveals the results */}
                 <div className="mt-auto flex items-center justify-between gap-4 pt-4 [@media(max-height:960px)]:pt-3">
                   <div className="flex items-center gap-1.5">
-                    {CLUE_SLIDES.map((clue, index) => (
+                    {slides.map((clue, index) => (
                       <button
                         key={clue.id}
                         type="button"

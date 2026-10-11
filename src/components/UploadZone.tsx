@@ -21,6 +21,8 @@ export type PanoramaInput = {
   /** A URL of its own, so the analysing screen can keep showing the panorama. */
   previewUrl: string;
   name: string;
+  urban: boolean;
+  cue?: string;
 };
 
 export type UploadZoneProps = {
@@ -32,6 +34,9 @@ export function UploadZone({ className, onAnalyze }: UploadZoneProps) {
   const [file, setFile] = useState<File | null>(null);
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [urban, setUrban] = useState<boolean>(true);
+  const [showCue, setShowCue] = useState<boolean>(false);
+  const [cue, setCue] = useState<string>("");
 
   // One object URL per chosen file, revoked as soon as it is replaced or removed.
   useEffect(() => {
@@ -86,7 +91,13 @@ export function UploadZone({ className, onAnalyze }: UploadZoneProps) {
     // A URL of its own, deliberately not the one this component revokes on
     // unmount, so the analysing screen can still show the panorama. `App` owns
     // this one and revokes it when the demo resets.
-    onAnalyze({ file, previewUrl: URL.createObjectURL(file), name: file.name });
+    onAnalyze({
+      file,
+      previewUrl: URL.createObjectURL(file),
+      name: file.name,
+      urban,
+      cue: cue.trim() ? cue.trim() : undefined,
+    });
   };
 
   const name = file?.name ?? "";
@@ -95,7 +106,7 @@ export function UploadZone({ className, onAnalyze }: UploadZoneProps) {
   const rootProps = getRootProps();
 
   return (
-    <div className={cn("w-full", className)}>
+    <div className={cn("w-full space-y-4", className)}>
       <div
         {...rootProps}
         onKeyDown={(event) => {
@@ -193,6 +204,76 @@ export function UploadZone({ className, onAnalyze }: UploadZoneProps) {
           )}
         </AnimatePresence>
       </div>
+
+      {/* Challenge Parameter Controls: Urban Toggle & Optional Cue */}
+      <div className="flex flex-col gap-3 rounded-lg border border-white/10 bg-white/[0.02] p-4 text-xs sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <span className="font-mono text-[11px] font-medium tracking-wider text-white/50 uppercase">
+            Environment:
+          </span>
+          <div className="inline-flex rounded-md border border-white/10 bg-black/50 p-0.5">
+            <button
+              type="button"
+              onClick={() => setUrban(true)}
+              className={cn(
+                "rounded px-3 py-1 font-mono text-[11px] transition-all",
+                urban
+                  ? "bg-lime text-black font-semibold shadow-[0_0_12px_rgba(214,255,66,0.4)]"
+                  : "text-white/60 hover:text-white"
+              )}
+            >
+              URBAN (100m scale)
+            </button>
+            <button
+              type="button"
+              onClick={() => setUrban(false)}
+              className={cn(
+                "rounded px-3 py-1 font-mono text-[11px] transition-all",
+                !urban
+                  ? "bg-sky-400 text-black font-semibold shadow-[0_0_12px_rgba(56,189,248,0.4)]"
+                  : "text-white/60 hover:text-white"
+              )}
+            >
+              RURAL (10km scale)
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <button
+            type="button"
+            onClick={() => setShowCue(!showCue)}
+            className="font-mono text-[11px] text-white/50 underline-offset-4 hover:text-lime hover:underline"
+          >
+            {showCue ? "— Hide text cue" : "+ Add optional hint / cue (×0.8)"}
+          </button>
+        </div>
+      </div>
+
+      {showCue && (
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: "auto" }}
+          exit={{ opacity: 0, height: 0 }}
+          className="space-y-1.5 rounded-lg border border-white/10 bg-black/40 p-3"
+        >
+          <div className="flex items-center justify-between">
+            <label htmlFor="cue-input" className="font-mono text-[11px] text-white/50 uppercase">
+              Cue details (no place names)
+            </label>
+            <span className="font-mono text-[10px] text-amber-400/80">Score penalty: ×0.8</span>
+          </div>
+          <input
+            id="cue-input"
+            type="text"
+            maxLength={1000}
+            value={cue}
+            onChange={(e) => setCue(e.target.value)}
+            placeholder="e.g. plane trees along the road, granite curbs, Atlantic vegetation"
+            className="w-full rounded border border-white/10 bg-white/[0.05] px-3 py-1.5 font-sans text-xs text-white placeholder-white/30 focus:border-lime/50 focus:outline-none"
+          />
+        </motion.div>
+      )}
 
       <AnimatePresence>
         {error !== null && (

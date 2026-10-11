@@ -6,7 +6,8 @@
   "description": "Lost & Found — panorama country guesser. Landing screen by The Winning Team.",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "package-source": "node scripts/package-source.mjs",
+    "build": "node scripts/package-source.mjs && tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "deploy": "npm run build && wrangler deploy",
@@ -33,6 +34,7 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^5.0.4",
+    "jszip": "^3.10.2",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.8.3",
     "vite": "^8.3.4",

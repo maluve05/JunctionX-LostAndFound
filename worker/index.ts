@@ -47,9 +47,19 @@ export default {
 
       try {
         const targetUrl = new URL(url.pathname + url.search, backendBase);
+
+        const proxyHeaders = new Headers();
+        for (const [key, value] of request.headers.entries()) {
+          const lower = key.toLowerCase();
+          if (lower === "host" || lower.startsWith("cf-") || lower.startsWith("x-forwarded-")) {
+            continue;
+          }
+          proxyHeaders.set(key, value);
+        }
+
         const backendRequest = new Request(targetUrl.toString(), {
           method: request.method,
-          headers: request.headers,
+          headers: proxyHeaders,
           body: request.body,
           redirect: "follow",
         });

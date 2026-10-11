@@ -5,3 +5,11 @@ dist-ssr
 *.local
 .DS_Store
 *.log
+*apikey*
+*.key
+*.pem
+.env*
+Research And Implementation/
+Malvin Model/
+forge2026-main/
+Website/

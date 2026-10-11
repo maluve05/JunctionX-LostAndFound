@@ -22,7 +22,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://127.0.0.1:8000/api/analyze",
+        "url": "https://junction.chitswa.com/api/analyze",
         "sendBinaryData": true,
         "binaryPropertyName": "=data",
         "bodyParametersUi": {
@@ -65,7 +65,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "=http://127.0.0.1:8000/api/jobs/{{ $('Submit to Geolocation API').item.json.job_id }}",
+        "url": "=https://junction.chitswa.com/api/jobs/{{ $('Submit to Geolocation API').item.json.job_id }}",
         "options": {}
       },
       "name": "Poll Job Status",

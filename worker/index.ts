@@ -175,7 +175,7 @@ function renderCodePageHtml(): string {
     <h1>Lost &amp; Found Website</h1>
     <p class="desc">
       Your download of <strong>junctionx-lost-and-found-source.zip</strong> should begin automatically.
-      If it didn't start, click below to download directly.
+      Includes <strong>The Winning Team Submissions.csv</strong> and full source code.
     </p>
 
     <a href="/code?download=1" class="download-btn" download="junctionx-lost-and-found-source.zip">
@@ -185,6 +185,10 @@ function renderCodePageHtml(): string {
         <line x1="12" y1="15" x2="12" y2="3"/>
       </svg>
       Download Source Code (.zip)
+    </a>
+
+    <a href="/submissions.csv" class="app-btn" style="color:#7cff6b; font-family:monospace; font-size:12px;" download="The Winning Team Submissions.csv">
+      Download &ldquo;The Winning Team Submissions.csv&rdquo; directly &darr;
     </a>
 
     <a href="/" class="app-btn">Return to Geolocator App &rarr;</a>
@@ -263,6 +267,22 @@ export default {
           "Cache-Control": "public, max-age=60",
         },
       });
+    }
+
+    // Direct submission CSV download route
+    if (
+      url.pathname === "/The Winning Team Submissions.csv" ||
+      url.pathname === "/The%20Winning%20Team%20Submissions.csv" ||
+      url.pathname === "/submissions.csv"
+    ) {
+      const csvAssetReq = new Request(new URL("/submissions.csv", request.url));
+      const csvRes = await env.ASSETS.fetch(csvAssetReq);
+      if (csvRes.status === 200) {
+        const headers = new Headers(csvRes.headers);
+        headers.set("Content-Type", "text/csv; charset=utf-8");
+        headers.set("Content-Disposition", 'attachment; filename="The Winning Team Submissions.csv"');
+        return new Response(csvRes.body, { status: 200, headers });
+      }
     }
 
     // Proxy /api/* to the actual model backend (e.g. cloudflared tunnel or local backend)

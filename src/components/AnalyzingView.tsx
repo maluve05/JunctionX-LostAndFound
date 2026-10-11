@@ -144,7 +144,6 @@ export function AnalyzingView({ panorama, onBack, onDone }: AnalyzingViewProps) 
               {panorama.urban ? "URBAN 100M" : "RURAL 10KM"}
             </span>
           </div>
-          <p className="truncate text-[13px] text-white/50">{panorama.name}</p>
         </motion.div>
 
         <motion.div variants={fadeUp} className="relative mt-5">
@@ -195,14 +194,11 @@ export function AnalyzingView({ panorama, onBack, onDone }: AnalyzingViewProps) 
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => window.location.reload()}
+                onClick={onBack}
                 className="gap-2 border-red-500/30 text-red-200 hover:bg-red-500/10"
               >
                 <RefreshCw className="size-3.5" />
                 Retry
-              </Button>
-              <Button type="button" variant="ghost" size="sm" onClick={onBack}>
-                Return to upload
               </Button>
             </div>
           </motion.div>

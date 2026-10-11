@@ -18,7 +18,6 @@ import {
   ChevronDown,
   Copy,
   Download,
-  HelpCircle,
   Sparkles,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -35,7 +34,6 @@ export interface ResultsViewProps {
   jobId?: string | null;
   /** Reads as "go back to the clues": App.tsx closes the aperture back onto Screen 2. */
   onBack: () => void;
-  onAnswerQuestion?: (optionIndex: number | null) => void;
 }
 
 interface CoordinateResult {
@@ -205,7 +203,6 @@ export function ResultsView({
   result,
   jobId,
   onBack,
-  onAnswerQuestion,
 }: ResultsViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<LeafletMap | null>(null);
@@ -389,55 +386,6 @@ export function ResultsView({
 
   return (
     <div className="relative flex min-h-screen flex-col bg-black text-mist">
-      {/* Phase 2 Interactive Quiz Prompt Banner */}
-      {result?.question && (
-        <motion.aside
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="relative z-30 border-b border-lime/30 bg-black/90 px-6 py-4 backdrop-blur-md"
-        >
-          <div className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-4 md:flex-row md:items-center">
-            <div className="flex items-center gap-3">
-              <span className="grid size-8 place-items-center rounded-lg bg-lime/20 text-lime ring-1 ring-lime/40">
-                <HelpCircle className="size-4" />
-              </span>
-              <div>
-                <div className="flex items-center gap-2">
-                  <p className="font-mono text-xs font-semibold tracking-wider text-lime uppercase">
-                    Agent Verification Quiz
-                  </p>
-                  <span className="rounded bg-amber-400/10 px-2 py-0.5 font-mono text-[10px] text-amber-400">
-                    Penalty: ×0.95
-                  </span>
-                </div>
-                <p className="text-sm font-medium text-white">{result.question.text}</p>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              {result.question.options.map((option, idx) => (
-                <Button
-                  key={option}
-                  size="sm"
-                  variant="outline"
-                  onClick={() => onAnswerQuestion?.(idx)}
-                  className="border-lime/30 font-mono text-xs text-lime hover:bg-lime/20 hover:text-white"
-                >
-                  {option}
-                </Button>
-              ))}
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => onAnswerQuestion?.(null)}
-                className="font-mono text-xs text-white/50 hover:text-white"
-              >
-                Submit without answering
-              </Button>
-            </div>
-          </div>
-        </motion.aside>
-      )}
 
       <main className="relative z-10 flex flex-1 flex-col px-10 py-6 max-lg:px-5">
         <div className="mx-auto grid w-full max-w-[1360px] flex-1 grid-cols-1 gap-7 lg:grid-cols-[440px_1fr]">

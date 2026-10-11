@@ -1,12 +1,12 @@
 import { motion } from "framer-motion";
-import { AlertCircle, ArrowLeft, Check, Loader2, RefreshCw } from "lucide-react";
+import { AlertCircle, ArrowLeft, Check, HelpCircle, Loader2, RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { CornerBrackets } from "@/components/CornerBrackets";
 import { Button } from "@/components/ui/button";
 import type { PanoramaInput } from "@/components/UploadZone";
 import { fadeUp } from "@/lib/motion";
-import type { GeolocationResult, JobStatusResponse } from "@/lib/types";
+import type { GeolocationResult, JobStatusResponse, QuizQuestion } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const STAGES = [
@@ -20,7 +20,7 @@ const STAGES = [
 export type AnalyzingViewProps = {
   panorama: PanoramaInput;
   onBack: () => void;
-  onDone: (result: GeolocationResult) => void;
+  onDone: (result: GeolocationResult, jobId: string) => void;
 };
 
 export function AnalyzingView({ panorama, onBack, onDone }: AnalyzingViewProps) {
@@ -29,6 +29,8 @@ export function AnalyzingView({ panorama, onBack, onDone }: AnalyzingViewProps) 
   const [elapsed, setElapsed] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
+  const [question, setQuestion] = useState<QuizQuestion | null>(null);
+  const [answering, setAnswering] = useState(false);
 
   const pollIntervalRef = useRef<number | null>(null);
   const timerIntervalRef = useRef<number | null>(null);
@@ -100,11 +102,12 @@ export function AnalyzingView({ panorama, onBack, onDone }: AnalyzingViewProps) 
         if (data.stage) setCurrentStage(data.stage);
         if (data.stages_done) setStagesDone(data.stages_done);
         if (typeof data.elapsed_s === "number") setElapsed(data.elapsed_s);
+        setQuestion(data.question ?? null);
 
         if (data.status === "done" && data.result) {
           if (pollIntervalRef.current) window.clearInterval(pollIntervalRef.current);
           if (timerIntervalRef.current) window.clearInterval(timerIntervalRef.current);
-          onDone(data.result);
+          onDone(data.result, jobId);
         } else if (data.status === "error") {
           if (pollIntervalRef.current) window.clearInterval(pollIntervalRef.current);
           if (timerIntervalRef.current) window.clearInterval(timerIntervalRef.current);
@@ -122,6 +125,25 @@ export function AnalyzingView({ panorama, onBack, onDone }: AnalyzingViewProps) 
       if (pollIntervalRef.current) window.clearInterval(pollIntervalRef.current);
     };
   }, [jobId, onDone]);
+
+  // The session is paused until the user picks an option or skips (null = submit without answering)
+  const answerQuestion = async (option: number | null) => {
+    if (!jobId || answering) return;
+    setAnswering(true);
+    try {
+      const res = await fetch(`/api/jobs/${jobId}/answer`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ option }),
+      });
+      if (!res.ok) throw new Error(`Answer failed with status ${res.status}`);
+      setQuestion(null);
+    } catch (err: unknown) {
+      console.warn("Answer error:", err);
+    } finally {
+      setAnswering(false);
+    }
+  };
 
   // Esc key listener
   useEffect(() => {
@@ -144,7 +166,6 @@ export function AnalyzingView({ panorama, onBack, onDone }: AnalyzingViewProps) 
               {panorama.urban ? "URBAN 100M" : "RURAL 10KM"}
             </span>
           </div>
-          <p className="truncate text-[13px] text-white/50">{panorama.name}</p>
         </motion.div>
 
         <motion.div variants={fadeUp} className="relative mt-5">
@@ -177,6 +198,56 @@ export function AnalyzingView({ panorama, onBack, onDone }: AnalyzingViewProps) 
           </div>
         </motion.div>
 
+        {question && !error && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-8 rounded-xl border border-lime/30 bg-black/60 p-5"
+          >
+            <div className="flex items-start gap-3.5">
+              <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-lime/20 text-lime ring-1 ring-lime/40">
+                <HelpCircle className="size-4" />
+              </span>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <p className="font-mono text-xs font-semibold tracking-wider text-lime uppercase">
+                    Agent Verification Quiz
+                  </p>
+                  <span className="rounded bg-amber-400/10 px-2 py-0.5 font-mono text-[10px] text-amber-400">
+                    Penalty: ×{question.penalty_factor}
+                  </span>
+                </div>
+                <p className="text-sm font-medium text-white">{question.text}</p>
+              </div>
+            </div>
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              {question.options.map((option, idx) => (
+                <Button
+                  key={option}
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={answering}
+                  onClick={() => answerQuestion(idx)}
+                  className="border-lime/30 font-mono text-xs text-lime hover:bg-lime/20 hover:text-white"
+                >
+                  {option}
+                </Button>
+              ))}
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                disabled={answering}
+                onClick={() => answerQuestion(null)}
+                className="font-mono text-xs text-white/50 hover:text-white"
+              >
+                Submit without answering
+              </Button>
+            </div>
+          </motion.div>
+        )}
+
         {error ? (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
@@ -195,14 +266,11 @@ export function AnalyzingView({ panorama, onBack, onDone }: AnalyzingViewProps) 
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => window.location.reload()}
+                onClick={onBack}
                 className="gap-2 border-red-500/30 text-red-200 hover:bg-red-500/10"
               >
                 <RefreshCw className="size-3.5" />
                 Retry
-              </Button>
-              <Button type="button" variant="ghost" size="sm" onClick={onBack}>
-                Return to upload
               </Button>
             </div>
           </motion.div>

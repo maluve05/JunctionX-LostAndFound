@@ -80,6 +80,7 @@ export default function App() {
     if (shutter !== "idle") return;
     setPanorama(input);
     setResult(null);
+    setJobId(null);
     setResumeClue(0);
 
     if (reduceMotion) {
@@ -91,8 +92,9 @@ export default function App() {
     setShutter("closing");
   };
 
-  const handleAnalysisDone = (analysisResult: GeolocationResult) => {
+  const handleAnalysisDone = (analysisResult: GeolocationResult, analysisJobId: string) => {
     setResult(analysisResult);
+    setJobId(analysisJobId);
     setResumeClue(0);
 
     if (reduceMotion) {
@@ -111,6 +113,7 @@ export default function App() {
       setScreen("landing");
       setPanorama(null);
       setResult(null);
+      setJobId(null);
       return;
     }
 
@@ -141,23 +144,6 @@ export default function App() {
 
     intent.current = "inspect";
     setShutter("closing");
-  };
-
-  const handleAnswerQuestion = async (optionIndex: number | null) => {
-    if (!jobId) return;
-    try {
-      await fetch(`/api/jobs/${jobId}/answer`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ option: optionIndex }),
-      });
-      // Clear question prompt once answered
-      if (result) {
-        setResult({ ...result, question: null });
-      }
-    } catch (e) {
-      console.error(e);
-    }
   };
 
   return (
@@ -219,7 +205,6 @@ export default function App() {
                 result={result}
                 jobId={jobId}
                 onBack={handleBackToClues}
-                onAnswerQuestion={handleAnswerQuestion}
               />
             </motion.div>
           ) : screen === "inspecting" && panorama ? (

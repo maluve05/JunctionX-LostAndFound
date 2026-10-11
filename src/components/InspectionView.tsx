@@ -32,7 +32,7 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { PanoramaInput } from "@/components/UploadZone";
 import { EASE_FORGE, EASE_OUT } from "@/lib/motion";
-import type { GeolocationResult } from "@/lib/types";
+import type { ClueItem, GeolocationResult } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export interface InspectionViewProps {
@@ -349,17 +349,43 @@ function computeBoxFromViewId(viewId: string): CropBox {
   return { x: Math.max(0, Math.min(1, x)), y, w, h };
 }
 
+const COUNTRY_NAMES: Record<string, Probability["country"]> = { ES: "SPAIN", PT: "PORTUGAL", FR: "FRANCE" };
+
+/** Country bars from shares keyed ES/PT/FR (any scale), as whole percentages with the leader marked. */
+function toProbabilities(shares: Record<string, number>): Probability[] {
+  const total = Object.keys(COUNTRY_NAMES).reduce((sum, code) => sum + (shares[code] || 0), 0) || 1;
+  const probs: Probability[] = Object.entries(COUNTRY_NAMES).map(([code, country]) => ({
+    country,
+    value: Math.round(((shares[code] || 0) / total) * 100),
+  }));
+  const maxVal = Math.max(...probs.map((p) => p.value));
+  const leader = probs.find((p) => p.value === maxVal && maxVal > 0) ?? probs[0];
+  leader.top = true;
+  return probs;
+}
+
+/**
+ * What one clue says about the country: start even, raise each country the clue implies and lower each one it
+ * excludes, both by the clue's confidence. A clue that names no country shows the overall estimate instead.
+ */
+function clueCountryProbs(clue: ClueItem, overall: Probability[]): Probability[] {
+  const countryOf = (code: string) => code.slice(0, 2).toUpperCase();
+  const implied = new Set((clue.implies ?? []).map(countryOf).filter((c) => c in COUNTRY_NAMES));
+  const excluded = new Set((clue.excludes ?? []).map(countryOf).filter((c) => c in COUNTRY_NAMES));
+  if (implied.size === 0 && excluded.size === 0) return overall;
+  const confidence = Math.min(Math.max(clue.confidence ?? 0.5, 0), 1);
+  const shares: Record<string, number> = {};
+  for (const code of Object.keys(COUNTRY_NAMES)) {
+    let weight = 1;
+    if (implied.has(code)) weight *= 1 + 4 * confidence;
+    if (excluded.has(code)) weight *= Math.max(1 - confidence, 0.02);
+    shares[code] = weight;
+  }
+  return toProbabilities(shares);
+}
+
 export function buildClueSlides(result: GeolocationResult): ClueSlide[] {
-  const countryProbs: Probability[] = [
-    { country: "SPAIN", value: Math.round((result.countries["ES"] || 0) * 100) },
-    { country: "PORTUGAL", value: Math.round((result.countries["PT"] || 0) * 100) },
-    { country: "FRANCE", value: Math.round((result.countries["FR"] || 0) * 100) },
-  ];
-  const maxVal = Math.max(...countryProbs.map((p) => p.value));
-  countryProbs.forEach((p) => {
-    if (p.value === maxVal && maxVal > 0) p.top = true;
-  });
-  if (!countryProbs.some((p) => p.top)) countryProbs[0].top = true;
+  const countryProbs = toProbabilities(result.countries ?? {});
 
   if (result.clues && result.clues.length > 0) {
     return result.clues.slice(0, 5).map((clue, idx) => {
@@ -399,7 +425,7 @@ export function buildClueSlides(result: GeolocationResult): ClueSlide[] {
         category: `${clue.source || "specialist"} · ${clue.category || "visual"}`,
         title: clue.raw_text || clue.observation?.slice(0, 36) || `Evidence Clue #${idx + 1}`,
         insights,
-        probabilities: countryProbs,
+        probabilities: clueCountryProbs(clue, countryProbs),
         box,
       };
     });

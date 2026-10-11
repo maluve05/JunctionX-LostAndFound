@@ -41,6 +41,7 @@ export interface ClueItem {
   raw_text?: string | null;
   view_id: string;
   implies: string[];
+  excludes?: string[];
   confidence: number;
 }
 
@@ -74,5 +75,7 @@ export interface JobStatusResponse {
   stages_done: string[];
   elapsed_s: number;
   error?: string | null;
+  /** Set while the session is paused waiting for the user to answer (or skip) a quiz question. */
+  question?: QuizQuestion | null;
   result?: GeolocationResult | null;
 }

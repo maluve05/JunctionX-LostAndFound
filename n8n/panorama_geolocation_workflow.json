@@ -1,0 +1,183 @@
+{
+  "name": "Lost & Found - Autonomous Panorama Geolocation Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "geolocate-panorama",
+        "responseMode": "responseNode",
+        "options": {
+          "binaryData": true
+        }
+      },
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        300
+      ],
+      "id": "node-webhook-trigger"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8000/api/analyze",
+        "sendBinaryData": true,
+        "binaryPropertyName": "=data",
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "urban",
+              "value": "={{ $json.body?.urban || 'true' }}"
+            },
+            {
+              "name": "cue",
+              "value": "={{ $json.body?.cue || '' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Submit to Geolocation API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        460,
+        300
+      ],
+      "id": "node-submit-analysis"
+    },
+    {
+      "parameters": {
+        "amount": 3,
+        "unit": "seconds"
+      },
+      "name": "Wait Interval",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        680,
+        300
+      ],
+      "id": "node-wait-interval"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://127.0.0.1:8000/api/jobs/{{ $('Submit to Geolocation API').item.json.job_id }}",
+        "options": {}
+      },
+      "name": "Poll Job Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        900,
+        300
+      ],
+      "id": "node-poll-status"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.status }}",
+              "value2": "done"
+            }
+          ]
+        }
+      },
+      "name": "Is Job Done?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        300
+      ],
+      "id": "node-check-done"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json.result, null, 2) }}",
+        "options": {}
+      },
+      "name": "Respond With Geolocation Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1360,
+        220
+      ],
+      "id": "node-respond-result"
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Submit to Geolocation API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Submit to Geolocation API": {
+      "main": [
+        [
+          {
+            "node": "Wait Interval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait Interval": {
+      "main": [
+        [
+          {
+            "node": "Poll Job Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Poll Job Status": {
+      "main": [
+        [
+          {
+            "node": "Is Job Done?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Job Done?": {
+      "main": [
+        [
+          {
+            "node": "Respond With Geolocation Result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait Interval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

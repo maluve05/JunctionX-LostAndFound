@@ -114,48 +114,63 @@ Text is UTF-8 everywhere (accents such as "Praça do Comércio"); keep `ensure_a
 - **"Analyze" sends `POST /analyze`** with the file, `urban` and `cue`.
 
 ### b. Analysing screen (`AnalyzingView.tsx`, which exists but nothing navigates to it yet)
-- **Show it between upload and inspection** (`App.tsx`: add a `"analyzing"` screen).
+- **Show it between upload and inspection:** add `"analyzing"` to `Screen` in `App.tsx`, which is now
+  `"landing" | "inspecting" | "results"`.
 - **Poll `GET /jobs/{id}` every 2 s.** Drive the stage list from `stages_done` / `stage` instead of the fixed
   1.5 s timer, and show the elapsed time (a run takes about 2 minutes).
-- **On `done`, go to the inspection screen** with the result. On `error`, show the message and a "try again" button.
+- **On `done`, keep the result in `App` state** and pass it to both `InspectionView` and `ResultsView`. On `error`,
+  show the message and a "try again" button.
 
-### c. Inspection screen (`InspectionView.tsx`): replace the fake `CLUE_SLIDES`
-Build the slides from `result.clues`, or, when there are none (common: many panoramas have no text or road signs),
-from the top candidates' `evidence`.
+### c. Inspection screen (`InspectionView.tsx`): build `CLUE_SLIDES` from the result
+Build the slides from `result.clues`. When there are none (common: many panoramas have no text or road signs), build
+them from the top candidates instead, one slide per candidate, using its `evidence` lines. Fields of `ClueSlide`:
 
-| slide field | from |
+| field | from |
 |---|---|
-| `category` | `` `${clue.source} · ${clue.category}` ``. Drop the "Google Lens" label: we do not use Google Lens |
-| `title` | `clue.raw_text` if any, else the first few words of `clue.observation` |
-| `characteristic` | `clue.observation` |
-| `explanation` | `"Points to " + implies.map(region name).join(", ")` |
-| `probabilities` | `result.countries` as percentages, the same on every slide (the real overall estimate) |
-| `box` | from `clue.view_id` (below) |
+| `tier` | `"STREET"` when the clue or candidate is pinned to a spot (the candidate has an `anchor` other than `"none"`, or `verified_by` is non-empty, or `radius_km` ≤ 1); `"CITY"` when `implies` holds region codes (`"PT-10"`, with a dash); `"COUNTRY"` when it only holds countries (`"PT"`) |
+| `category` | `` `${clue.source} · ${clue.category}` `` (for example "road · architecture"). Do not say "Google Lens": we do not use it |
+| `title` | `clue.raw_text` if any, else the first few words of `clue.observation` (candidate slides: the candidate's `name`) |
+| `insights` (exactly 4) | 1: what was seen (`observation`); 2: the text read (`raw_text`), or the confidence when there is none; 3: "Points to" + region names of `implies`; 4: "Rules out" + `excludes`, or for a candidate its first `verified_by` fact. Keep each `fact` to one sentence (≤14 words): cut the backend's longer sentences |
+| `probabilities` | `result.countries` as percentages for SPAIN / PORTUGAL / FRANCE, `top: true` on the largest. These are the real overall estimate, so they are the same on every slide |
+| `box` | from `clue.view_id` (below). Candidate slides have no view: use the view a clue named, or a centred box |
 
 **Box from `view_id`.** A `view_id` is `yaw{deg}` (a 90° view centred `deg` degrees right of the image's centre
 column), `yaw{deg}_tile{0-3}` (a quarter of that view: 0 top-left, 1 top-right, 2 bottom-left, 3 bottom-right),
-`down` or `up`. In fractions of the panorama image:
-- horizon view: `x = ((0.5 + deg / 360 - 0.125) mod 1)`, `w = 0.25`, `y = 0.25`, `h = 0.5`;
-- a tile halves that: `w = 0.125`, `h = 0.25`, plus `0.125` on x for tiles 1 and 3 and `0.25` on y for tiles 2 and 3;
-- `down`: `x = 0.375, w = 0.25, y = 0.75, h = 0.25`; `up`: the same with `y = 0`.
+`down` or `up`. In pane fractions:
+- **x and w:** horizon view `x = (0.5 + deg / 360 - 0.125) mod 1`, `w = 0.25`. For a tile, `w = 0.125`, plus `0.125`
+  on x for tiles 1 and 3. For `down` / `up`, `x = 0.375`, `w = 0.25`.
+- **h:** the screen needs `0.80 ≤ w/h ≤ 0.90`, so take `h = w / 0.85`. That is a centred part of the view's height,
+  which is fine: the box marks where to look.
+- **y:** centre the box on the view's vertical centre in the pane: `0.5` for a horizon view, about `0.36` for
+  tiles 0/1, `0.64` for tiles 2/3, `0.85` for `down`, `0.15` for `up`. So `y = centre - h / 2`, clamped to
+  `[0, 1 - h]`.
+- **Wrap-around.** A box at `yaw180` straddles the image's left and right edges: shift it to `x = 0` or
+  `x = 1 - w`.
+- **Why these numbers:** the pane is 21:9 and the image 2:1 with `object-cover`, so about 7% of the image height is
+  cut off at the top and the bottom. The pane centres above already account for it.
 
-Two corrections:
-- **Wrap-around.** A box at `yaw180` straddles the image's left and right edges. Clamp it to one side, or draw two
-  boxes.
-- **The pane's crop.** The pane is 21:9 and the image is 2:1 with `object-cover`, so about 7% of the image height is
-  cut off at the top and the bottom. Convert with `paneY = (y - 0.0714) / 0.857` and `paneH = h / 0.857`; x is
-  unchanged.
+### d. Results screen (`ResultsView.tsx`): replace the hard-coded `RESULTS`
+Map `result.candidates` (the distinct places, best first) to `CoordinateResult`:
 
-### d. The answer, which nothing on the site shows yet (it is what gets scored)
-Add a results panel to the inspection screen:
-- **The answer list:** the 10 ranked coordinates with a copy button, and one button that copies all 10 as
-  `lat, lng` lines. Entries often repeat: that is intended, since repeating the best point maximises the expected
-  score.
-- **A map:** the simplest option is an `<iframe>` of `https://www.openstreetmap.org/export/embed.html?bbox=…&marker=lat,lon`,
-  or Leaflet with OSM tiles if there is time. Draw `top` and the other candidates as circles of `radius_km`.
-- **The top hypothesis:** name, probability, `evidence` and `verified_by` (the facts confirmed by tools).
+| field | from |
+|---|---|
+| `rank` | `candidate.rank` |
+| `lat`, `lng` | `candidate.lat`, `candidate.lon` |
+| `label` | `` `${candidate.region_name}, ${country name}` `` (country from the code's prefix: `PT-10` → Portugal) |
+| `countryCode`, `countryFlag` | `"pt"` / `"es"` / `"fr"` from the same prefix, and its flag |
+| `city` | `candidate.name` (for example "Castelo de Leiria, Leiria") |
+| `probability` | `Math.round(candidate.probability * 100)` |
+
+There are usually 1 to 6 candidates, not always 6, so the pin animation (`PULLBACK_AT` depends on
+`RESULTS.length`) must cope with 1.
+
+**Also show the actual submission,** which nothing on the site shows yet and which is what gets scored:
+- **`result.answer`:** the 10 ranked coordinates, with a button that copies all 10 as `lat, lng` lines. Entries often
+  repeat the same point: that is intended, since repeating the best point maximises the expected score. The
+  candidates list above is the explanation; this list is the answer.
 - **The judge's `summary`** as a short paragraph.
-- **The expected score** (the maximum is about 16 050: all 10 entries exact, no hints), and a warning badge when `low_confidence`.
+- **The expected score** (the maximum is about 16 050: all 10 entries exact, no hints), and a warning badge when
+  `low_confidence`.
 
 ---
 
